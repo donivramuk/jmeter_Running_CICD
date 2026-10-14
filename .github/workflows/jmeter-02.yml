@@ -1,0 +1,82 @@
+name: JMeter Script 02 (parameterized)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'jmeter_scripts/**'
+      - 'test-data/**'
+      - '.github/workflows/jmeter-02.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      script:
+        description: 'Path to the JMX script'
+        default: 'jmeter_scripts/advBanking_multiuser.jmx'
+        required: true
+      data_file:
+        description: 'Path to the CSV test data file'
+        default: 'test-data/user_cred.csv'
+        required: true
+
+env:
+  JMETER_VERSION: '5.6.3'
+  JMX_FILE: ${{ github.event.inputs.script || 'jmeter_scripts/advBanking_multiuser.jmx' }}
+  DATA_FILE: ${{ github.event.inputs.data_file || 'test-data/user_cred.csv' }}
+
+jobs:
+  jmeter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache JMeter
+        id: cache-jmeter
+        uses: actions/cache@v4
+        with:
+          path: apache-jmeter-${{ env.JMETER_VERSION }}
+          key: jmeter-${{ env.JMETER_VERSION }}
+
+      - name: Download JMeter
+        if: steps.cache-jmeter.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o jmeter.tgz https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz
+          tar -xzf jmeter.tgz
+
+      - name: Verify test data file
+        run: |
+          test -f "$DATA_FILE" || { echo "Data file not found: $DATA_FILE"; exit 1; }
+          echo "Using data file $DATA_FILE ($(($(wc -l < "$DATA_FILE") - 1)) rows)"
+
+      - name: Run JMeter test
+        run: |
+          mkdir -p results
+          apache-jmeter-${JMETER_VERSION}/bin/jmeter -n \
+            -t "$JMX_FILE" \
+            -JdataFile="$GITHUB_WORKSPACE/$DATA_FILE" \
+            -l results/results.jtl \
+            -j results/jmeter.log \
+            -e -o results/html-report
+
+      - name: Fail on sampler errors
+        run: |
+          errors=$(awk -F',' 'NR>1 && $8=="false"' results/results.jtl | wc -l)
+          total=$(($(wc -l < results/results.jtl) - 1))
+          echo "Samples: $total, Errors: $errors"
+          echo "### JMeter script 02: $total samples, $errors errors" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$errors" -gt 0 ]; then exit 0; fi
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-results-script-02
+          path: results/
