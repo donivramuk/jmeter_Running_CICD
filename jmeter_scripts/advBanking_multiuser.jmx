@@ -2509,7 +2509,7 @@ Ha/J[S]@https://apis.google.com/js/api.js:24:129
         <boolProp name="recycle">true</boolProp>
         <stringProp name="shareMode">shareMode.all</stringProp>
         <boolProp name="stopThread">false</boolProp>
-        <stringProp name="variableNames">username,password</stringProp>
+        <stringProp name="variableNames"></stringProp>
       </CSVDataSet>
       <hashTree/>
     </hashTree>
